@@ -52,36 +52,31 @@ bg() {
             fi
         fi
         for j in $(awk -F"\t" '$3 > 98 {print $2}' "$OUTPUT_DIR"/"$SAMPLE_ID"/denovo/results.txt | sort -u); do
+            echo "$j" | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
+            grep "^$j" $HOME/rnapenr/blastdb/"$PANEL".tsv | awk -F"\t" '{print $2}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
+            grep "^$j" $HOME/rnapenr/blastdb/"$PANEL".tsv | awk -F"\t" '{print $3}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
+            echo "$SAMPLE_ID" | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
             bwa index $HOME/rnapenr/refseq/"$j".fasta
-            bwa mem -t "$THREADS" $HOME/rnapenr/refseq/"$j".fasta "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID".trimmed.R1.fastq.gz "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID".trimmed.R2.fastq.gz -o "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".bam
-            samtools sort -o "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".bam
+            bwa mem -t "$THREADS" $HOME/rnapenr/refseq/"$j".fasta "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID".trimmed.R1.fastq.gz "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID".trimmed.R2.fastq.gz | tee >(samtools view -c - | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv) | samtools sort - > "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam
             samtools index "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam
+            samtools view -c "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
+            samtools depth -a "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam > "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth.tsv
             samtools mpileup -d 50000 --reference $HOME/rnapenr/refseq/"$j".fasta -a -B "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | ivar variants -p "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j" -q 30 -t 0.05 -r $HOME/rnapenr/refseq/"$j".fasta
             samtools mpileup -d 50000 --reference $HOME/rnapenr/refseq/"$j".fasta -a -B "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | ivar consensus -p "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth"$DEPTH" -q 30 -t 0 -m 10 -n N
             sed -i -e 's/>.*/>'${SAMPLE_ID}'/g' "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth"$DEPTH".fa
-        done
-        rm -rf "$OUTPUT_DIR"/"$SAMPLE_ID".*.fastq.gz
-        for k in $(awk -F"\t" '$3 > 98 {print $2}' "$OUTPUT_DIR"/"$SAMPLE_ID"/denovo/results.txt | sort -u); do
-            echo "$k" | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
-            grep "^$k" $HOME/rnapenr/blastdb/"$PANEL".tsv | awk -F"\t" '{print $2}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
-            grep "^$k" $HOME/rnapenr/blastdb/"$PANEL".tsv | awk -F"\t" '{print $3}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
-            echo "$SAMPLE_ID" | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
-            samtools depth -a "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".sorted.bam > "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".depth.tsv
-            samtools view -c "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".sorted.bam | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
-            samtools view -c -h -F 4 "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".sorted.bam | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
-            AVG_DEPTH=$(samtools depth "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".sorted.bam | awk '{sum+=$3} END {print sum/NR}')
+            AVG_DEPTH=$(samtools depth "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | awk '{sum+=$3} END {print sum/NR}')
             if [[ "$AVG_DEPTH" == "" || "$AVG_DEPTH" == 0 ]]; then
                 echo "0.00""#" | tr '#' '\t' | tr -d '\n' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
             else
                 echo "$AVG_DEPTH" | awk '{printf $0"#"}' | tr '#' '\t' | tr -d '\n' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
             fi
-            paste <(samtools depth "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".sorted.bam | awk '{if ($3 > '"10"') {print $0}}' | wc -l) <(fastalength $HOME/rnapenr/refseq/"$k".fasta | awk '{print $1}') | awk -F"\t" '{printf("%0.2f\n", $1/$2*100)}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
-            paste <(samtools depth "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".sorted.bam | awk '{if ($3 > '"100"') {print $0}}' | wc -l) <(fastalength $HOME/rnapenr/refseq/"$k".fasta | awk '{print $1}') | awk -F"\t" '{printf("%0.2f\n", $1/$2*100)}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
-            paste <(samtools depth "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".sorted.bam | awk '{if ($3 > '"1000"') {print $0}}' | wc -l) <(fastalength $HOME/rnapenr/refseq/"$k".fasta | awk '{print $1}') | awk -F"\t" '{printf("%0.2f\n", $1/$2*100)}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
-            N_COUNT=$(seqtk comp "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".depth10.fa | awk -F"\t" '{print $9}')
-            N_COUNT_PER=$(paste <(seqtk comp "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".depth10.fa | awk -F"\t" '{print $9}') <(fastalength $HOME/rnapenr/refseq/"$k".fasta | awk '{print $1}')| awk -F"\t" '{printf("%0.2f\n", ($1/$2)*100)}')
-            REF_SEQ_LENGHT=$(fastalength $HOME/rnapenr/refseq/"$k".fasta | awk -F" " '{print $1}')
-            REF_SEQ_COV=$(paste <(fastalength $HOME/rnapenr/refseq/"$k".fasta | awk '{print $1}') <(seqtk comp "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$k".depth10.fa | awk -F"\t" '{print $9}') | awk -F"\t" '{printf("%0.2f\n", ($1-$2)/$1*100)}')
+            paste <(samtools depth "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | awk '{if ($3 > '"10"') {print $0}}' | wc -l) <(fastalength $HOME/rnapenr/refseq/"$j".fasta | awk '{print $1}') | awk -F"\t" '{printf("%0.2f\n", $1/$2*100)}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
+            paste <(samtools depth "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | awk '{if ($3 > '"100"') {print $0}}' | wc -l) <(fastalength $HOME/rnapenr/refseq/"$j".fasta | awk '{print $1}') | awk -F"\t" '{printf("%0.2f\n", $1/$2*100)}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
+            paste <(samtools depth "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | awk '{if ($3 > '"1000"') {print $0}}' | wc -l) <(fastalength $HOME/rnapenr/refseq/"$j".fasta | awk '{print $1}') | awk -F"\t" '{printf("%0.2f\n", $1/$2*100)}' | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
+            N_COUNT=$(seqtk comp "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth10.fa | awk -F"\t" '{print $9}')
+            N_COUNT_PER=$(paste <(seqtk comp "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth10.fa | awk -F"\t" '{print $9}') <(fastalength $HOME/rnapenr/refseq/"$j".fasta | awk '{print $1}')| awk -F"\t" '{printf("%0.2f\n", ($1/$2)*100)}')
+            REF_SEQ_LENGHT=$(fastalength $HOME/rnapenr/refseq/"$j".fasta | awk -F" " '{print $1}')
+            REF_SEQ_COV=$(paste <(fastalength $HOME/rnapenr/refseq/"$j".fasta | awk '{print $1}') <(seqtk comp "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth10.fa | awk -F"\t" '{print $9}') | awk -F"\t" '{printf("%0.2f\n", ($1-$2)/$1*100)}')
             if [[ "$N_COUNT" == 0 ]]; then
                 echo "0.00" | awk '{printf $0"#"}' | tr '#' '\t' | tr -d '\n' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
                 echo "$REF_SEQ_LENGHT" | awk '{printf $0"#"}' | tr '#' '\t' | tr -d '\n' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
@@ -92,6 +87,7 @@ bg() {
                 echo "$N_COUNT_PER" | awk '{printf $0"\n"}' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
             fi
         done
+        rm -rf "$OUTPUT_DIR"/"$SAMPLE_ID".*.fastq.gz
     done
 
     conda deactivate
