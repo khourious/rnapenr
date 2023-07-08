@@ -59,7 +59,7 @@ bg() {
             bwa index $HOME/rnapenr/refseq/"$j".fasta
             bwa mem -t "$THREADS" $HOME/rnapenr/refseq/"$j".fasta "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID".trimmed.R1.fastq.gz "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID".trimmed.R2.fastq.gz | tee >(samtools view -c - | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv) | samtools sort - > "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam
             samtools index "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam
-            samtools view -c "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
+            samtools view  -c -h -F "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
             samtools depth -a "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam > "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth.tsv
             samtools mpileup -d 50000 --reference $HOME/rnapenr/refseq/"$j".fasta -a -B "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | ivar variants -p "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j" -q 30 -t 0.05 -r $HOME/rnapenr/refseq/"$j".fasta
             samtools mpileup -d 50000 --reference $HOME/rnapenr/refseq/"$j".fasta -a -B "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | ivar consensus -p "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth"$DEPTH" -q 30 -t 0 -m 10 -n N
