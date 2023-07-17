@@ -16,16 +16,16 @@ bg() {
 
     THREADS=$(nproc)
     SAMPLE_SHEET=$1
+    LIBRARY=$(cat "$SAMPLE_SHEET" | egrep "Experiment Name" | awk -F, '{print $2})
     DEPTH=10
     INPUT_DIR=$HOME/BaseSpace
-    OUTPUT_DIR=$HOME/rnapenr/assembly
+    OUTPUT_DIR=$HOME/rnapenr/"$LIBRARY"
 
     [[ ! -d "$OUTPUT_DIR" ]] && mkdir "$OUTPUT_DIR" && chmod 700 -R "$OUTPUT_DIR"
 
     cat $SAMPLE_SHEET | tr -dc '[:print:]\n' | sed -e '1,18d' | awk -v SAMPLE_SHEET="$(basename "$SAMPLE_SHEET" .csv)" -F, '{print $1","SAMPLE_SHEET","$NF}' | sort > "$OUTPUT_DIR"/sample_sheet.csv
 
     for i in $(cat "$OUTPUT_DIR"/sample_sheet.csv); do
-        LIBRARY=$(echo "$i" | awk -F, '{print $2}' | sort -u)
         [[ ! -d "$INPUT_DIR"/"$LIBRARY" ]] && bs download project --no-metadata --summary --extension=fastq.gz -o "$INPUT_DIR"/"$LIBRARY" -n "$LIBRARY"
     done
 
@@ -59,7 +59,7 @@ bg() {
             bwa index $HOME/rnapenr/refseq/"$j".fasta
             bwa mem -t "$THREADS" $HOME/rnapenr/refseq/"$j".fasta "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID".trimmed.R1.fastq.gz "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID".trimmed.R2.fastq.gz | tee >(samtools view -c - | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv) | samtools sort - > "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam
             samtools index "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam
-            samtools view  -c "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
+            samtools view -F 4 -c "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | awk '{printf $0"#"}' | tr '#' '\t' >> "$OUTPUT_DIR"/"$SAMPLE_ID".summary.tsv
             samtools depth -a "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam > "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth.tsv
             samtools mpileup -d 50000 --reference $HOME/rnapenr/refseq/"$j".fasta -a -B "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | ivar variants -p "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j" -q 30 -t 0.05 -r $HOME/rnapenr/refseq/"$j".fasta
             samtools mpileup -d 50000 --reference $HOME/rnapenr/refseq/"$j".fasta -a -B "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".sorted.bam | ivar consensus -p "$OUTPUT_DIR"/"$SAMPLE_ID"/"$SAMPLE_ID"."$j".depth"$DEPTH" -q 30 -t 0 -m 10 -n N
@@ -98,6 +98,6 @@ bg() {
 
 }
 
-bg $1 >> rnapenr.log.$(uname -n).$(date +'%Y-%m-%d').txt 2>&1 &
+bg $1 >> "$LIBRARY".rnapenr.log.$(uname -n).$(date +'%Y-%m-%d').txt 2>&1 &
 
 exit 0
